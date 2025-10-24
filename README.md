@@ -1,7 +1,4 @@
-sxxkjnhbkn 
-
-
-;l]][lkhnlknlnj      l;uhjhthre rigbththe # Queue Management System
+# Queue Management System
 
 A Django-based queue management system with SMS notifications for token status updates.
 
