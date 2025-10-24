@@ -2,6 +2,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.contrib.auth.decorators import user_passes_test
 from django.utils import timezone
+from datetime import timedelta
+from django.db import connection
 from django.conf import settings
 from twilio.rest import Client
 import logging
@@ -22,14 +24,22 @@ def generate_token(request):
             customer_name = form.cleaned_data['customer_name']
             phone_number = form.cleaned_data.get('phone_number')
             token = Token.objects.create(customer_name=customer_name, phone_number=phone_number)
-            # placeholder: send SMS (implement provider integration later)
+            # Calculate estimated wait and send a friendly initial SMS
+            tokens_ahead = Token.objects.filter(is_served=False, token_number__lt=token.token_number).count()
+            per_token = getattr(settings, 'PER_TOKEN_MINUTES', 2)
+            # Minimum wait for a newly created token should be one slot * per_token
+            est_wait = (tokens_ahead + 1) * per_token  # minutes per token estimate
             try:
-                send_sms(phone_number, f"Your token is {token.token_number}. Visit /status/{token.token_number}/ to see updates.")
+                init_msg = (
+                    f"Hi {customer_name}, your token #{token.token_number} is confirmed. "
+#                    f"Counters will be allotted soon. Estimated wait: {est_wait} minutes. "
+                    f"You will receive an update when a counter is assigned."
+                    f"Track your status at /status/{token.token_number}/"
+                )
+                send_sms(phone_number, init_msg)
             except Exception:
                 # don't block token creation if SMS fails
                 pass
-            tokens_ahead = Token.objects.filter(is_served=False, token_number__lt=token.token_number).count()
-            est_wait = tokens_ahead * 2
             return render(request, 'token.html', {
                 'token': token,
                 'tokens_ahead': tokens_ahead,
@@ -37,28 +47,42 @@ def generate_token(request):
             })
     return redirect('home')
 
+
 def send_sms(phone_number, message):
     """Send SMS using Twilio"""
     if not phone_number or not settings.SMS_ENABLED:
         return False
 
+    # Format Indian numbers automatically (optional)
+    if phone_number.isdigit() and len(phone_number) == 10:
+        phone_number = '+91' + phone_number
+
     try:
         client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
-        client.messages.create(
-            body=message,
-            messaging_service_sid=settings.TWILIO_MESSAGING_SERVICE_SID,
-            to=phone_number
-        )
+        # Prefer messaging service SID if configured, otherwise use a Twilio phone number
+        msg_kwargs = {
+            'body': message,
+            'to': phone_number,
+        }
+        if getattr(settings, 'TWILIO_MESSAGING_SERVICE_SID', ''):
+            msg_kwargs['messaging_service_sid'] = settings.TWILIO_MESSAGING_SERVICE_SID
+        else:
+            msg_kwargs['from_'] = settings.TWILIO_PHONE_NUMBER
+
+        client.messages.create(**msg_kwargs)
+        print(f"SMS sent to {phone_number}")  # Debug
         return True
     except Exception as e:
         logger.error(f"SMS sending failed: {e}")
+        print(f"SMS failed: {e}")  # Debug
         return False
 
 def queue_status(request, token_number):
     token = get_object_or_404(Token, token_number=token_number)
     current_serving = Token.objects.filter(is_served=False).order_by('token_number').first()
     tokens_ahead = Token.objects.filter(is_served=False, token_number__lt=token.token_number).count()
-    est_wait = tokens_ahead * 2
+    per_token = getattr(settings, 'PER_TOKEN_MINUTES', 2)
+    est_wait = (tokens_ahead + 1) * per_token
     # Support both modern header check and Django's is_ajax fallback
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or getattr(request, 'is_ajax', lambda: False)()
     if is_ajax:
@@ -67,6 +91,7 @@ def queue_status(request, token_number):
             'tokens_ahead': tokens_ahead,
             'est_wait': est_wait,
         })
+
     return render(request, 'queue_status.html', {
         'token': token,
         'current_serving': current_serving,
@@ -100,7 +125,7 @@ def create_counter(request):
             ServiceCounter.objects.create(name=name, is_available=True)
     return redirect('admin_dashboard')
 
-@user_passes_test(admin_check)
+'''@user_passes_test(admin_check)
 def serve_next(request):
     """Serve next token with fairness rules"""
     if request.method == 'POST':
@@ -116,14 +141,73 @@ def serve_next(request):
             # Get next token that can be fairly served
             next_token = Token.get_next_servable()
             if next_token and next_token.start_serving(counter):
+                tokens_ahead = Token.objects.filter(is_served=False, token_number__lt=next_token.token_number).count()
+                per_token = getattr(settings, 'PER_TOKEN_MINUTES', 2)
+                est_wait = (tokens_ahead + 1) * per_token
+
                 # Send SMS notification
                 if next_token.phone_number:
-                    message = f"Your token #{next_token.token_number} is now being served at counter {counter.name}."
+                    start_time = timezone.localtime(next_token.started_serving).strftime('%H:%M') if next_token.started_serving else timezone.localtime(timezone.now()).strftime('%H:%M')
+                    message = (
+                        f"Good news — your token #{next_token.token_number} is now being served at counter {counter.name}. "
+                        f"Please collect your order. Started at {start_time}."
+                    )
                     send_sms(next_token.phone_number, message)
                     
         except (ServiceCounter.DoesNotExist, ValueError):
             pass
             
+    return redirect('admin_dashboard')'''
+
+@user_passes_test(admin_check)
+def serve_next(request):
+    """Serve next token with fairness rules"""
+    if request.method == 'POST':
+        counter_id = request.POST.get('counter_id')
+        if not counter_id:
+            return redirect('admin_dashboard')
+
+        # ✅ Step 1: Check if any counters are available
+        available_counters = ServiceCounter.objects.filter(is_available=True)
+        if not available_counters.exists():
+            # No free counters — notify waiting users
+            waiting_tokens = Token.objects.filter(is_served=False, started_serving__isnull=True)
+            for t in waiting_tokens:
+                if t.phone_number:
+                    send_sms(
+                        t.phone_number,
+                        f"Dear {t.customer_name}, all counters are currently busy. "
+                        f"You’ll be notified once a counter is free."
+                    )
+            # Return without trying to allocate
+            return redirect('admin_dashboard')
+
+        # ✅ Step 2: Proceed to assign the next token
+        try:
+            counter = ServiceCounter.objects.get(id=int(counter_id))
+            if not counter.is_available:
+                return redirect('admin_dashboard')
+
+            next_token = Token.get_next_servable()
+            if next_token and next_token.start_serving(counter):
+                # Calculate estimated wait for clarity
+                tokens_ahead = Token.objects.filter(is_served=False, token_number__lt=next_token.token_number).count()
+                per_token = getattr(settings, 'PER_TOKEN_MINUTES', 2)
+                est_wait = (tokens_ahead + 1) * per_token
+
+                # ✅ Step 3: Send SMS about counter assignment
+                if next_token.phone_number:
+                    start_time = timezone.localtime(timezone.now()).strftime('%H:%M')
+                    message = (
+                        f"Hi {next_token.customer_name}, your token #{next_token.token_number} "
+                        f"is now being served at counter {counter.name}. "
+                        f"Estimated service start time: {start_time}. Please proceed soon."
+                    )
+                    send_sms(next_token.phone_number, message)
+
+        except (ServiceCounter.DoesNotExist, ValueError) as e:
+            logger.error(f"Serve next error: {e}")
+
     return redirect('admin_dashboard')
 
 
@@ -137,8 +221,25 @@ def mark_served(request, token_number):
         # Notify next in line if within threshold
         next_possible = Token.get_next_servable()
         if next_possible and next_possible.phone_number:
-            message = f"Your token #{next_possible.token_number} will be served soon. Please proceed to the waiting area."
+            # Estimate wait time for the next_possible token and attach expected time
+            tokens_ahead_np = Token.objects.filter(is_served=False, token_number__lt=next_possible.token_number).count()
+            per_token = getattr(settings, 'PER_TOKEN_MINUTES', 2)
+            est_wait_np = (tokens_ahead_np + 1) * per_token
+            expected_time = (timezone.localtime(timezone.now()) + timedelta(minutes=est_wait_np)).strftime('%H:%M')
+            message = (
+                f"Update for token #{next_possible.token_number}: a counter will be allotted soon. "
+                f"Estimated wait: {est_wait_np} minutes (approx at {expected_time}). Please be ready to proceed to the waiting area."
+            )
             send_sms(next_possible.phone_number, message)
+
+        # Notify the token owner that their order has been served/collected
+        if token.phone_number:
+            completed_time = timezone.localtime(token.completed_serving or timezone.now()).strftime('%H:%M')
+            collected_msg = (
+                f"Your token #{token.token_number} has been served and collected at {completed_time}. "
+                f"Thank you for visiting!"
+            )
+            send_sms(token.phone_number, collected_msg)
             
     return redirect('admin_dashboard')
 
@@ -150,4 +251,12 @@ def reset_queue(request):
         Token.objects.all().delete()
         # mark all counters available
         ServiceCounter.objects.update(is_available=True)
+        # Reset SQLite autoincrement sequence so token numbers start back at 1
+        try:
+            if connection.vendor == 'sqlite':
+                with connection.cursor() as cursor:
+                    cursor.execute("DELETE FROM sqlite_sequence WHERE name='queue_app_token';")
+        except Exception:
+            # Non-fatal; leave as-is for other DB backends
+            pass
     return redirect('admin_dashboard')

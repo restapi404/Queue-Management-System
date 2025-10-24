@@ -8,9 +8,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from .env file
 load_dotenv(BASE_DIR / '.env')
 
-SECRET_KEY = 'django-insecure-REPLACE_ME_WITH_A_SECRET_KEY'
-DEBUG = True
-ALLOWED_HOSTS = []
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-REPLACE_ME_WITH_A_SECRET_KEY')
+DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else []
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -105,12 +105,12 @@ LOGGING = {
 }
 
 # Queue settings
-FAIRNESS_THRESHOLD = 3  # Max tokens ahead allowed
-AUTO_ASSIGN_INTERVAL = 5  # Seconds between auto-assignment checks
-MAX_SERVING_TIME = 10 * 60  # Maximum time (in seconds) a token can be served before auto-completion
+FAIRNESS_THRESHOLD = int(os.environ.get('FAIRNESS_THRESHOLD', 3))  # Max tokens ahead allowed
+AUTO_ASSIGN_INTERVAL = int(os.environ.get('AUTO_ASSIGN_INTERVAL', 5))  # Seconds between auto-assignment checks
+MAX_SERVING_TIME = int(os.environ.get('MAX_SERVING_TIME', 600))  # Maximum time (in seconds) a token can be served before auto-completion
 
 # SMS settings - Twilio Configuration
-SMS_ENABLED = True
+SMS_ENABLED = os.environ.get('SMS_ENABLED', 'False') == 'True'
 TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
 TWILIO_MESSAGING_SERVICE_SID = os.environ.get('TWILIO_MESSAGING_SERVICE_SID', '')
 TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')  # Set this in environment for security

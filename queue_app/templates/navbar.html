@@ -1,12 +1,15 @@
-<nav class="navbar navbar-expand-lg navbar-light bg-light">
-  <div class="container">
-    <a class="navbar-brand" href="{% url 'home' %}">Queue Management</a>
-    <div>
-      <ul class="navbar-nav ms-auto">
-        <li class="nav-item"><a class="nav-link" href="{% url 'home' %}">Home</a></li>
-        
-        <li class="nav-item"><a class="nav-link" href="{% url 'admin_dashboard' %}">Admin Dashboard</a></li>
-      </ul>
+<nav class="bg-white shadow">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between h-16">
+      <div class="flex">
+        <div class="flex-shrink-0 flex items-center">
+          <a href="{% url 'home' %}" class="font-bold text-xl text-gray-800">Queue Management</a>
+        </div>
+      </div>
+      <div class="flex items-center">
+        <a href="{% url 'home' %}" class="px-3 py-2 text-gray-600 hover:text-gray-900">Home</a>
+        <a href="{% url 'admin_dashboard' %}" class="px-3 py-2 text-gray-600 hover:text-gray-900">Admin Dashboard</a>
+      </div>
     </div>
   </div>
 </nav>

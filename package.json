@@ -1,0 +1,14 @@
+{
+  "name": "queue-management",
+  "version": "1.0.0",
+  "description": "Queue Management System with modern UI",
+  "scripts": {
+    "build:css": "tailwindcss -i ./queue_app/static/css/src/tailwind.css -o ./queue_app/static/css/dist/style.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.7",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.3.5"
+  }
+}

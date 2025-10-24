@@ -1,0 +1,12 @@
+{
+  "name": "queue-management",
+  "version": "1.0.0",
+  "description": "A queue management system with Tailwind CSS",
+  "scripts": {
+    "dev": "tailwindcss -i ./src/tailwind.css -o ./style.css --watch",
+    "build": "tailwindcss -i ./src/tailwind.css -o ./style.css --minify"
+  },
+  "dependencies": {
+    "tailwindcss": "^3.3.3"
+  }
+}
