@@ -1,0 +1,44 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Queue Status</title>
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="{% static 'js/main.js' %}"></script>
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container mt-5">
+    <h2>Live Queue Status</h2>
+    <div id="queue-status" class="card p-3">
+  <p>Your Token: <strong>{{ token.token_number }}</strong></p>
+  <p>Current Serving: <span id="current-serving">{% if current_serving %}{{ current_serving.token_number }}{% else %}--{% endif %}</span></p>
+      <p>Tokens Ahead in Queue: <span id="tokens-ahead">{{ tokens_ahead }}</span></p>
+      <p>Estimated Wait Time: <span id="est-wait">{{ est_wait }}</span> minutes</p>
+      <p>Status: <span id="your-status">{% if token.is_served %}<span class="badge bg-success">Served</span>{% else %}<span class="badge bg-warning text-dark">Waiting</span>{% endif %}</span></p>
+    </div>
+    <a href="{% url 'home' %}" class="btn btn-link mt-3">Back to Home</a>
+  </div>
+  <script>
+    // Real-time AJAX polling for status
+    setInterval(function() {
+      $.ajax({
+        url: window.location.pathname,
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+        dataType: "json",
+        success: function(data) {
+          $("#current-serving").text(data.current_serving || '--');
+          $("#tokens-ahead").text(data.tokens_ahead);
+          $("#est-wait").text(data.est_wait);
+          if (data.tokens_ahead === 0) {
+            $("#your-status").html('<span class="badge bg-info text-dark">Next</span>');
+          }
+        }
+      });
+    }, 3000); // Every 3 seconds
+  </script>
+</body>
+</html>

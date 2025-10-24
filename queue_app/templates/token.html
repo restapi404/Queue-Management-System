@@ -1,0 +1,24 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Your Token</title>
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container mt-5">
+    <h2>Token Generated!</h2>
+    <div class="card p-3 mb-3">
+      <h4>Token Number: <span class="badge bg-info">{{ token.token_number }}</span></h4>
+      <p>Name: <strong>{{ token.customer_name }}</strong></p>
+      <p>Tokens ahead of you: <strong>{{ tokens_ahead }}</strong></p>
+      <p>Estimated wait time: <strong>{{ est_wait }} minutes</strong></p>
+      <a href="{% url 'queue_status' token.token_number %}" class="btn btn-success mt-2">Check Live Queue Status</a>
+    </div>
+    <a href="{% url 'home' %}" class="btn btn-link">Back to Home</a>
+  </div>
+</body>
+</html>

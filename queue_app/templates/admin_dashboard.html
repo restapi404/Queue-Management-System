@@ -1,0 +1,135 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body>
+  {% include 'navbar.html' %}
+  <div class="container mt-5">
+    <h2>Admin Dashboard</h2>
+    <div class="row mb-4">
+      <div class="col-md-6">
+        <h4>Active Queue</h4>
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>Name</th>
+              <th>Issued At</th>
+              <th>Counter</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for token in active_tokens %}
+              <tr>
+                <td>{{ token.token_number }}</td>
+                <td>{{ token.customer_name }}</td>
+                <td>{{ token.issued_at|date:"Y-m-d H:i" }}</td>
+                <td>{% if token.counter %}{{ token.counter.name }}{% else %}-{% endif %}</td>
+                <td>
+                  {% if not token.is_served %}
+                    <span class="badge bg-warning text-dark">Waiting</span>
+                  {% else %}
+                    <span class="badge bg-success">Served</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <form method="POST" action="{% url 'mark_served' token.token_number %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-success">Mark Served</button>
+                  </form>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5">No active tokens.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <form method="POST" action="{% url 'serve_next' %}">
+          {% csrf_token %}
+          <div class="input-group mb-2">
+            <select name="counter_id" class="form-select">
+              <option value="">Assign to counter (optional)</option>
+              {% for counter in counters %}
+                <option value="{{ counter.id }}">{{ counter.name }}{% if not counter.is_available %} (busy){% endif %}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary">Serve Next Token</button>
+          </div>
+        </form>
+        <form method="POST" action="{% url 'reset_queue' %}" onsubmit="return confirm('Are you sure you want to clear all tokens?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger mt-2">Reset/Clear All Tokens</button>
+        </form>
+      </div>
+      <div class="col-md-6">
+        <h4>Last 20 Served Tokens</h4>
+        <table class="table table-bordered">
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>Name</th>
+              <th>Issued At</th>
+              <th>Counter</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for token in served_tokens %}
+              <tr>
+                <td>{{ token.token_number }}</td>
+                <td>{{ token.customer_name }}</td>
+                <td>{{ token.issued_at|date:"Y-m-d H:i" }}</td>
+                <td>{% if token.counter %}{{ token.counter.name }}{% else %}-{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4">No served tokens.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <hr>
+    <h4>Service Counters</h4>
+    <form method="POST" action="{% url 'create_counter' %}" class="row g-2 mb-3">
+      {% csrf_token %}
+      <div class="col-auto" style="max-width:300px;">
+        {{ counter_form.name }}
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-primary">Add Counter</button>
+      </div>
+    </form>
+    <table class="table table-hover mb-4">
+      <thead>
+        <tr>
+          <th>Counter Name</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for counter in counters %}
+          <tr>
+            <td>{{ counter.name }}</td>
+            <td>
+              {% if counter.is_available %}
+                <span class="badge bg-success">Available</span>
+              {% else %}
+                <span class="badge bg-danger">Busy</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="2">No counters configured.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <hr>
+    <a href="/admin/" class="btn btn-outline-secondary">Advanced Admin</a>
+  </div>
+</body>
+</html>
